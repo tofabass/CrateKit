@@ -15,7 +15,21 @@ function keyColor(key) {
 }
 function edgeColor(freq) {
   const t = Math.pow((freq - 5) / 95, 1.2);
-  return new THREE.Color().lerpColors(new THREE.Color(0x2e5be0), new THREE.Color(0xff1f3d), t);
+  return new THREE.Color().lerpColors(new THREE.Color(0x38bdf8), new THREE.Color(0xff2a4b), t);
+}
+
+/* H/E/S classification for synapses (same rule as trackdata.js edgeType):
+   'H' — Harmonic: shared harmony (same / adjacent Camelot key)
+   'E' — Energetic: shared energy level (within 1 step)
+   'S' — Sonic: otherwise — it just objectively sounds good together */
+function keyClose(a, b) {
+  const d = Math.abs(parseInt(a) - parseInt(b));
+  return d === 0 || d === 1 || d === 11;
+}
+function edgeTypeOf(A, B) {
+  if (keyClose(A.camelot, B.camelot)) return 'H';
+  if (Math.abs(A.energy - B.energy) <= 1) return 'E';
+  return 'S';
 }
 function hashStr(s) {
   let h = 0;
@@ -70,7 +84,7 @@ function computeSuggestions(tracks, edges) {
       if (!nA || !nB) continue;
       let shared = 0;
       for (const n of nA) if (nB.has(n)) shared++;
-      if (shared >= 1) out.push({ a: A, b: B, score: shared });
+      if (shared >= MUTUAL_THRESHOLD) out.push({ a: A, b: B, score: shared }); // wings only where approval is required
     }
   }
   out.sort((x, y) => y.score - x.score || hashStr(x.a + x.b) - hashStr(y.a + y.b));
@@ -132,6 +146,7 @@ const glowTex = (() => {
 /* ---------- state ---------- */
 let brainName = 'Master Brain';
 let mode = 'free';
+let spreadFactor = 1.0; // live Spread slider (0.4x..2.5x): scales inter-node distance only — node sizes, line thickness and labels never scale
 let brain = null; // { tracks, edges, group, nodeById, edgeById }
 
 const raycaster = new THREE.Raycaster();
@@ -145,43 +160,61 @@ let approval = null; // active Create-Link animation state
 const pf = { path: [], previewing: false, t0: 0, total: 0, camPlan: [], camIdx: 0 };
 
 /* ---------- scene building ---------- */
-function roundRectPath(x, px, py, w, h, r) {
-  x.beginPath();
-  x.moveTo(px + r, py);
-  x.arcTo(px + w, py, px + w, py + h, r);
-  x.arcTo(px + w, py + h, px, py + h, r);
-  x.arcTo(px, py + h, px, py, r);
-  x.arcTo(px, py, px + w, py, r);
-  x.closePath();
-}
-
 function makeLabel(track) {
   const c = document.createElement('canvas');
-  c.width = 768; c.height = 224;
+  c.width = 768; c.height = 200;
   const x = c.getContext('2d');
   x.textAlign = 'center';
   let fs = 58;
   x.font = `700 ${fs}px system-ui, sans-serif`;
   while (x.measureText(track.title).width > 700 && fs > 30) { fs -= 2; x.font = `700 ${fs}px system-ui, sans-serif`; }
   const as = Math.max(26, Math.round(fs * 0.62));
-  // slightly opaque plate behind the text
-  x.fillStyle = 'rgba(10, 10, 18, 0.55)';
-  roundRectPath(x, 14, 14, 740, 196, 26); x.fill();
-  x.strokeStyle = 'rgba(255,255,255,0.14)';
-  x.lineWidth = 3;
-  roundRectPath(x, 14, 14, 740, 196, 26); x.stroke();
+  // minimalist: crisp white title + muted grey artist, subtle drop shadow (no plate)
+  x.shadowColor = 'rgba(0,0,0,0.8)';
+  x.shadowBlur = 10;
+  x.shadowOffsetY = 3;
   x.font = `700 ${fs}px system-ui, sans-serif`;
   x.fillStyle = '#ffffff';
-  x.fillText(track.title, 384, 96);
+  x.fillText(track.title, 384, 88);
   x.font = `400 ${as}px system-ui, sans-serif`;
-  x.fillStyle = 'rgba(255,255,255,0.62)';
-  x.fillText(track.artist, 384, 170);
+  x.fillStyle = 'rgba(158,166,180,0.95)';
+  x.fillText(track.artist, 384, 158);
   const tex = new THREE.CanvasTexture(c);
   // depthTest off + high renderOrder: the title card always renders on top of
   // any synapse passing in front, so it never gets visually blocked
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0.96 }));
-  spr.scale.set(18.5, 5.4, 1);
+  spr.scale.set(18.5, 4.8, 1);
   spr.renderOrder = 999;
+  return spr;
+}
+
+/* tracked-out uppercase genre label for the orbital column view */
+function makeGenreLabel(genre) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const x = c.getContext('2d');
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  let fs = 96;
+  const draw = () => {
+    x.font = `600 ${fs}px system-ui, sans-serif`;
+    x.letterSpacing = '16px';
+    const text = genre.toUpperCase();
+    while (x.measureText(text).width > 960 && fs > 40) {
+      fs -= 4;
+      x.font = `600 ${fs}px system-ui, sans-serif`;
+    }
+    x.shadowColor = 'rgba(0,0,0,0.8)';
+    x.shadowBlur = 8;
+    x.shadowOffsetY = 3;
+    x.fillStyle = 'rgba(160,168,182,0.85)';
+    x.fillText(text, 512, 128);
+  };
+  draw();
+  const tex = new THREE.CanvasTexture(c);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  spr.scale.set(26, 6.5, 1);
+  spr.renderOrder = 500;
   return spr;
 }
 
@@ -202,10 +235,12 @@ function makeCoreTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const x = c.getContext('2d');
+  // hot white center with a soft radial falloff — reads as a glowing neon orb
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
   g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.72, 'rgba(255,255,255,1)');
-  g.addColorStop(0.88, 'rgba(255,255,255,0.75)');
+  g.addColorStop(0.3, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.78, 'rgba(255,255,255,0.22)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = g;
   x.fillRect(0, 0, 128, 128);
@@ -216,7 +251,21 @@ function buildNode(track, sOut) {
   const group = new THREE.Group();
   const col = keyColor(track.camelot);
 
-  // defined outer outline — thin muted grey (low energy) to thick bright white (high energy)
+  // soft outer halo — additive bloom around the core, stronger at high energy.
+  // own texture instance (cloned): disposeGroup frees every material's map, so
+  // the shared global glowTex must not be referenced by rebuildable nodes
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex.clone(),
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.06 + 0.3 * Math.pow(energyT(track.energy), 1.6),
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  halo.scale.setScalar(sOut * 1.55);
+  group.add(halo);
+
+  // defined outer outline — energy-colored ring (thin at low energy, thick at high)
   const ring = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeRingTexture(track.energy),
     color: energyColor(track.energy),
@@ -228,16 +277,16 @@ function buildNode(track, sOut) {
   ring.userData = { kind: 'node', track };
   group.add(ring);
 
-  // key-colored glow disc, inset inside the ring with a visible gap
+  // key-colored neon core — hot center + soft radial glow, inset inside the ring
   const core = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeCoreTexture(),
     color: col,
     transparent: true,
-    opacity: 0.95,
+    opacity: 1.0,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   }));
-  core.scale.setScalar(sOut * 0.62);
+  core.scale.setScalar(sOut * 0.72);
   group.add(core);
 
   const label = makeLabel(track);
@@ -245,7 +294,7 @@ function buildNode(track, sOut) {
   label.visible = false;
   group.add(label);
 
-  group.userData = { kind: 'node', track, ring, core, label, baseRingColor: ring.material.color.clone(), radius: sOut / 2 };
+  group.userData = { kind: 'node', track, ring, core, label, halo, baseRingColor: ring.material.color.clone(), radius: sOut / 2 };
   return group;
 }
 
@@ -288,11 +337,55 @@ function makeBranch(curve, t, rng, r, mat) {
   return tube;
 }
 
+/* dash/dot pattern textures for 'E'/'S' synapses — white pattern on black;
+   with AdditiveBlending the black parts add nothing, so they read as gaps.
+   'x' = pattern runs along UV.x (TubeGeometry path length),
+   'y' = along UV.y (CylinderGeometry height). Each edge owns its OWN texture
+   instance: disposeGroup frees every material's map, so a shared one would
+   break sibling edges after a rebuild. */
+function makePatternTexture(kind, along) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#000';
+  x.fillRect(0, 0, 256, 256);
+  x.fillStyle = '#fff';
+  if (kind === 'E') {
+    // crisp dashes: two per tile
+    const dash = 76, gap = 52;
+    for (let i = 0; i < 256; i += dash + gap) {
+      if (along === 'x') x.fillRect(i - 10, 0, dash, 256);
+      else x.fillRect(0, i - 10, 256, dash);
+    }
+  } else {
+    // beaded dots: eight per tile (wraps cleanly at the tile edge)
+    const period = 32, r = 8;
+    for (let i = 0; i < 256; i += period) {
+      for (const o of [i + period / 2 - 256, i + period / 2, i + period / 2 + 256]) {
+        if (o < -16 || o > 272) continue;
+        x.beginPath();
+        if (along === 'x') x.arc(o, 128, r, 0, Math.PI * 2);
+        else x.arc(128, o, r, 0, Math.PI * 2);
+        x.fill();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 function buildEdge(edge, posA, posB, radA, radB, trackA, trackB) {
   const t = (edge.freq - 5) / 95;
-  const r = 0.13 + t * 0.5;
+  const type = edge.type || 'S';
+  const r = 0.04 + t * 0.14; // sleek thin glowing filament, not a bulky tube
   const baseColor = edgeColor(edge.freq);
-  const mat = new THREE.MeshBasicMaterial({ color: baseColor.clone(), transparent: true, opacity: 0.55 + t * 0.45 });
+  const matOpts = { color: baseColor.clone(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
+  // type-differentiated lines: 'H' solid, 'E' dashed, 'S' dotted
+  if (type === 'E') matOpts.opacity = 0.95;
+  else if (type === 'S') matOpts.opacity = 0.9;
+  else matOpts.opacity = 0.55 + t * 0.45;
+  const mat = new THREE.MeshBasicMaterial(matOpts);
   // anchor synapses at the node surface, not the center
   const d = posB.clone().sub(posA).normalize();
   const a = posA.clone().addScaledVector(d, radA);
@@ -314,6 +407,19 @@ function buildEdge(edge, posA, posB, radA, radB, trackA, trackB) {
     mesh.userData = { kind: 'edge', edge };
   }
 
+  // 'E'/'S' pattern: dashes scroll fast (spark), dots drift slow (throb)
+  const texAxis = curve ? 'x' : 'y'; // tube: U = path length, cylinder: V = height
+  let dashTex = null, dashRate = 0;
+  if (type === 'E' || type === 'S') {
+    dashTex = makePatternTexture(type, texAxis);
+    const tiles = Math.max(4, Math.min(140, Math.round(len / (type === 'E' ? 12 : 20))));
+    if (texAxis === 'x') dashTex.repeat.set(tiles, 1);
+    else dashTex.repeat.set(1, tiles);
+    dashRate = type === 'E' ? 1.8 : 0.35;
+    mat.map = dashTex;
+    mat.needsUpdate = true;
+  }
+
   // fat invisible hover hit-area: makes thin synapses much easier to grab
   const hitR = Math.max(r * 3.5, 1.5); // generous invisible corridor around the thin visible line
   const hitMat = new THREE.MeshBasicMaterial();
@@ -328,19 +434,6 @@ function buildEdge(edge, posA, posB, radA, radB, trackA, trackB) {
   hitMesh.userData = { kind: 'edge', edge };
   extra.push(hitMesh);
 
-  // flared dendrite-bout sockets where the synapse meets each node
-  const flareR = r * 2.3;
-  const flareLen = Math.max(len * (edgeStyle === 'neural' ? 0.2 : 0.16), 2.2);
-  for (const [pt, dir] of [[a, d], [b, d.clone().negate()]]) {
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.15, flareR, flareLen, 12, 1, true), mat);
-    cone.position.copy(pt).addScaledVector(dir, flareLen / 2);
-    cone.quaternion.setFromUnitVectors(UP, dir);
-    cone.userData = { kind: 'edge', edge };
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(flareR * 0.7, 14, 12), mat);
-    bulb.position.copy(pt).addScaledVector(dir, flareR * 0.3);
-    bulb.userData = { kind: 'edge', edge };
-    extra.push(cone, bulb);
-  }
   extra.forEach(o => { if (!o.userData.basePos) o.userData.basePos = o.position.clone(); });
 
   // sway axes (perpendicular to the synapse) for the music wiggle
@@ -348,19 +441,23 @@ function buildEdge(edge, posA, posB, radA, radB, trackA, trackB) {
   const side1 = new THREE.Vector3().crossVectors(d, ref).normalize();
   const side2 = new THREE.Vector3().crossVectors(d, side1).normalize();
 
-  // traveling light pulse: symmetric 3D oval, energy-colored A -> B
+  // traveling light pulse: small, bright, additive — per-type character:
+  // 'H' steady glide, 'E' fast spark (elongated), 'S' slow (throbs in animate)
+  const pulseScale = type === 'E' ? 0.75 : type === 'S' ? 1.15 : 1;
+  const pulseLen = type === 'E' ? 3.2 : 2.3;
   const pulse = new THREE.Mesh(
-    new THREE.SphereGeometry(Math.max(0.16, r * 1.9), 12, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
+    new THREE.SphereGeometry(Math.max(0.16, r * 2.2), 12, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: type === 'E' ? 1.0 : 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
   );
-  pulse.scale.set(1, 2.3, 1);
+  pulse.scale.set(pulseScale, pulseLen, pulseScale);
   if (!curve) alignY(pulse.quaternion, d);
 
   return {
-    mesh, pulse, a, b, baseColor,
-    speed: 0.06 + t * 0.3, offset: (hashStr(edge.a + edge.b) % 100) / 100,
+    mesh, pulse, a, b, baseColor, type, dashTex, dashRate, texAxis, pulseScale, pulseLen,
+    speed: (0.06 + t * 0.3) * (type === 'E' ? 2.2 : type === 'S' ? 0.85 : 1),
+    offset: (hashStr(edge.a + edge.b) % 100) / 100,
     highFreq: edge.freq >= 70, curve, extra,
-    swayMeshes: extra, // tube branches + end flares: everything that sways with the synapse
+    swayMeshes: extra,
     basePos: mesh.position.clone(),
     baseOp: mat.opacity,
     side1, side2,
@@ -492,7 +589,7 @@ function refreshSuggestions() {
 function commitConnection(s) {
   const nA = brain.nodeById.get(s.a), nB = brain.nodeById.get(s.b);
   const radA = nA.userData.radius, radB = nB.userData.radius;
-  const e = { a: s.a, b: s.b, freq: 60 };
+  const e = { a: s.a, b: s.b, freq: 60, type: edgeTypeOf(brain.trackById.get(s.a), brain.trackById.get(s.b)) };
   const eo = buildEdge(e, nA.position, nB.position, radA, radB,
     brain.trackById.get(s.a), brain.trackById.get(s.b));
   eo.baseOp = eo.mesh.material.opacity;
@@ -568,22 +665,31 @@ function forceLayout(tracks, edges) {
 }
 
 function clusterLayout(tracks) {
+  // orbital cluster view: one clean vertical "planetary column" per genre,
+  // spread across the X-axis; tracks stacked strictly by energy (low at the
+  // bottom, high at the top) with radial X/Z jitter so nodes don't overlap
   const genres = [...new Set(tracks.map(t => t.genre))].sort();
-  const R = genres.length > 1 ? 40 : 0;
   const pos = new Map();
+  const labels = [];
+  const spacing = genres.length > 1 ? 36 : 0;
   genres.forEach((genre, gi) => {
-    const ang = (gi / genres.length) * Math.PI * 2;
-    const cx = Math.cos(ang) * R, cz = Math.sin(ang) * R;
+    const cx = (gi - (genres.length - 1) / 2) * spacing;
     const members = tracks.filter(t => t.genre === genre).sort((a, b) => a.energy - b.energy);
-    members.forEach((t, i) => {
+    let yMin = Infinity;
+    members.forEach((t) => {
       const rng = mulberry32(hashStr(t.id) ^ 7);
       const y = (t.energy - 5.5) * 9.0;
-      const rr = 4.0 + rng() * 4.0;
+      const rr = 3.0 + rng() * 4.0;
       const aa = rng() * Math.PI * 2;
-      pos.set(t.id, new THREE.Vector3(cx + Math.cos(aa) * rr, y, cz + Math.sin(aa) * rr));
+      pos.set(t.id, new THREE.Vector3(cx + Math.cos(aa) * rr, y, Math.sin(aa) * rr));
+      yMin = Math.min(yMin, y);
     });
+    // tracked-out uppercase genre label under the column
+    const spr = makeGenreLabel(genre);
+    spr.position.set(cx, yMin - 11, 0);
+    labels.push(spr);
   });
-  return pos;
+  return { pos, labels };
 }
 
 function disposeGroup(g) {
@@ -617,9 +723,14 @@ function rebuildBrain(name) {
 
   const group = new THREE.Group();
   const seed = hashStr(name + (mode === 'free' ? ':free' : ':cluster'));
-  const pos = (mode === 'free')
-    ? forceLayout(tracks, edges)
-    : clusterLayout(tracks);
+  let pos, clusterLabels = null;
+  if (mode === 'free') {
+    pos = forceLayout(tracks, edges);
+  } else {
+    const cl = clusterLayout(tracks);
+    pos = cl.pos;
+    clusterLabels = cl.labels;
+  }
 
   const trackById = new Map(tracks.map(t => [t.id, t]));
   // node size = connection count (degree); ring still encodes energy
@@ -630,17 +741,22 @@ function rebuildBrain(name) {
   }
   const sizes = new Map(tracks.map(t => [t.id, 6.0 + Math.min(degree.get(t.id), 12) * 0.7]));
 
+  // apply the current Spread immediately so mode / playlist switches keep it
+  const spreadPos = new Map();
+  for (const [id, p] of pos) spreadPos.set(id, p.clone().multiplyScalar(spreadFactor));
+
   const nodeById = new Map();
   for (const t of tracks) {
     const node = buildNode(t, sizes.get(t.id));
-    node.position.copy(pos.get(t.id));
     node.userData.track = t;
+    node.userData.basePos = pos.get(t.id).clone(); // unscaled layout position (Spread source of truth)
+    node.position.copy(node.userData.basePos).multiplyScalar(spreadFactor);
     group.add(node);
     nodeById.set(t.id, node);
   }
   const edgeObjs = [];
   for (const e of edges) {
-    const eo = buildEdge(e, pos.get(e.a), pos.get(e.b), sizes.get(e.a) / 2, sizes.get(e.b) / 2, trackById.get(e.a), trackById.get(e.b));
+    const eo = buildEdge(e, spreadPos.get(e.a), spreadPos.get(e.b), sizes.get(e.a) / 2, sizes.get(e.b) / 2, trackById.get(e.a), trackById.get(e.b));
     group.add(eo.mesh);
     group.add(eo.pulse);
     eo.extra.forEach(o => group.add(o));
@@ -650,20 +766,118 @@ function rebuildBrain(name) {
   // dendrite wings reaching toward the mutual-connection threshold
   const suggestions = computeSuggestions(tracks, edges)
     .filter(s => !dismissedPairs.has(pairKey(s.a, s.b)))
-    .map(s => buildSuggestion(s, pos, sizes, group));
+    .map(s => buildSuggestion(s, spreadPos, sizes, group));
+
+  if (clusterLabels) {
+    clusterLabels.forEach(l => {
+      l.userData.basePos = l.position.clone(); // unscaled genre-label position
+      l.position.copy(l.userData.basePos).multiplyScalar(spreadFactor);
+    });
+    clusterLabels.forEach(l => group.add(l));
+  }
 
   scene.add(group);
-  brain = { tracks, edges, group, nodeById, edgeObjs, trackById, suggestions };
+  brain = { tracks, edges, group, nodeById, edgeObjs, trackById, suggestions, clusterLabels };
   // bounding sphere of the whole network (neurons + synapses) — used by the
   // infinite-void loop to test whether everything is out of view
   brain.boundSphere = new THREE.Box3().setFromObject(group).getBoundingSphere(new THREE.Sphere());
 
   controls.target.set(0, 0, 0);
   if (mode === 'free') camera.position.set(0, 10, 95);
-  else camera.position.set(0, 4, 78);
+  else camera.position.set(0, 4, 96); // wider spread of genre columns
 
   renderTrackList(); // keep the track list in sync with the active brain
   showPromptIfNeeded();
+}
+
+/* ---------- live Spread: reposition the whole network in place ----------
+   Never scales brain.group (that would stretch nodes/labels/lines); every node,
+   label, synapse and dendrite wing is rebuilt against the new distances. The
+   camera is left exactly where the user put it. */
+function applySpread(factor) {
+  spreadFactor = Math.min(2.5, Math.max(0.4, +factor || 1));
+  const val = document.getElementById('brainSpreadVal');
+  if (val) val.textContent = spreadFactor.toFixed(2).replace(/0$/, '') + 'x';
+  if (!brain) return;
+
+  // cancel any in-flight Create-Link sequence: its geometry is about to be rebuilt
+  if (approval) {
+    brain.group.remove(approval.waveA, approval.waveB);
+    for (const wv of [approval.waveA, approval.waveB]) {
+      if (wv.material.map) wv.material.map.dispose();
+      wv.material.dispose();
+    }
+    approval = null;
+  }
+
+  // 1) reposition nodes + genre labels from their unscaled base positions
+  const pos = new Map(), sizes = new Map();
+  brain.nodeById.forEach((n, id) => {
+    const p = n.userData.basePos.clone().multiplyScalar(spreadFactor);
+    n.position.copy(p);
+    pos.set(id, p);
+    sizes.set(id, n.userData.radius * 2);
+  });
+  for (const l of (brain.clusterLabels || [])) {
+    l.position.copy(l.userData.basePos).multiplyScalar(spreadFactor);
+  }
+
+  // 2) rebuild every synapse (mesh, pulses, branches, hit corridors) so it
+  //    spans the new node distance — node sizes & line radii stay constant
+  const hoverEdgeData = hoveredEdge ? hoveredEdge.mesh.userData.edge : null;
+  const fadingEdges = new Set(brain.edgeObjs.filter(eo => eo.fadingIn).map(eo => eo.mesh.userData.edge));
+  for (const eo of brain.edgeObjs) {
+    brain.group.remove(eo.mesh, eo.pulse);
+    eo.extra.forEach(o => brain.group.remove(o));
+    eo.mesh.geometry.dispose();
+    eo.pulse.geometry.dispose();
+    eo.extra.forEach(o => { if (o.geometry) o.geometry.dispose(); });
+    const mats = new Set([eo.mesh.material, eo.pulse.material]);
+    eo.extra.forEach(o => { if (o.material) mats.add(o.material); });
+    mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+  }
+  brain.edgeObjs.length = 0;
+  for (const e of brain.edges) {
+    const eo = buildEdge(e, pos.get(e.a), pos.get(e.b), sizes.get(e.a) / 2, sizes.get(e.b) / 2,
+      brain.trackById.get(e.a), brain.trackById.get(e.b));
+    brain.group.add(eo.mesh);
+    brain.group.add(eo.pulse);
+    eo.extra.forEach(o => brain.group.add(o));
+    if (fadingEdges.has(e)) { eo.fadingIn = true; eo.fadeT0 = clock.elapsedTime; } // keep committed-synapse fade-in alive
+    brain.edgeObjs.push(eo);
+  }
+
+  // 3) rebuild the dendrite wings (incl. any dissolving ones) for the new distances
+  for (const w of wingDissolve) {
+    brain.group.remove(w.s.wingA, w.s.wingB);
+    w.s.wingA.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    w.s.wingB.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    w.s.mat.dispose();
+  }
+  wingDissolve.length = 0;
+  for (const s of brain.suggestions) {
+    brain.group.remove(s.wingA, s.wingB);
+    s.wingA.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    s.wingB.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    s.mat.dispose();
+  }
+  brain.suggestions.length = 0;
+  for (const f of computeSuggestions(brain.tracks, brain.edges).filter(s => !dismissedPairs.has(pairKey(s.a, s.b)))) {
+    brain.suggestions.push(buildSuggestion(f, pos, sizes, brain.group));
+  }
+  showPromptIfNeeded();
+
+  // 4) restore the hover highlight on the rebuilt synapse (node refs were never rebuilt)
+  hoveredEdge = hoverEdgeData
+    ? (brain.edgeObjs.find(x => x.mesh.userData.edge === hoverEdgeData) || null)
+    : null;
+  if (hoveredEdge) {
+    hoveredEdge.mesh.material.color.copy(hoveredEdge.baseColor).lerp(_whiteC, 0.65);
+    hoveredEdge.pulse.material.opacity = 1;
+  }
+
+  // 5) recompute the wrap-test sphere so the infinite-void loop stays accurate
+  brain.boundSphere = new THREE.Box3().setFromObject(brain.group).getBoundingSphere(new THREE.Sphere());
 }
 
 /* ---------- interaction ---------- */
@@ -768,7 +982,7 @@ function focusNode(track) {
 function openModal(track) {
   const neighbors = brain.edges
     .filter(e => e.a === track.id || e.b === track.id)
-    .map(e => ({ other: e.a === track.id ? e.b : e.a, freq: e.freq }))
+    .map(e => ({ other: e.a === track.id ? e.b : e.a, freq: e.freq, type: e.type || 'S' }))
     .sort((x, y) => y.freq - x.freq);
 
   document.getElementById('mTitle').textContent = track.title;
@@ -790,7 +1004,9 @@ function openModal(track) {
     row.className = 'crow';
     row.style.setProperty('--ec', col);
     row.style.animationDelay = (i * 70) + 'ms';
+    const etName = { H: 'HARMONIC', E: 'ENERGETIC', S: 'SONIC' }[n.type] || 'SONIC';
     row.innerHTML =
+      `<span class="etype et-${n.type}" title="${etName} connection">${n.type}</span>` +
       `<div class="info"><div class="t">${other.title}</div><div class="a">${other.artist} &middot; ${other.camelot}</div></div>` +
       `<div class="f">${n.freq}%</div>` +
       `<button class="qplay" data-id="${other.id}">▶ QUICK-PLAY</button>`;
@@ -962,6 +1178,7 @@ function pfEndPreview() {
   const setPfOpen = (open) => {
     pfPanel.classList.toggle('hidden', !open);
     document.body.classList.toggle('pfOpen', open);
+    pfEl('pfToggle').classList.toggle('active', open);
   };
   pfEl('pfToggle').addEventListener('click', () => setPfOpen(pfPanel.classList.contains('hidden')));
   pfEl('pfClose').addEventListener('click', () => setPfOpen(false));
@@ -1003,10 +1220,10 @@ function renderTrackList(query = '') {
       `<span class="a">${t.artist} \u00b7 ${t.bpm} BPM \u00b7 Energy ${t.energy}/10</span></span>` +
       `<span class="k" style="background:${kc}22;color:${kc};border:1px solid ${kc}55">${t.camelot}</span>`;
     row.addEventListener('click', () => {
-      trackPanel.classList.add('hidden');
       tSearchEl.blur();
       closeModal();
       focusNode(t); // fly there + play; click the node again to open its card
+      // panel stays open so you can click through tracks in a row
     });
     tListEl.appendChild(row);
   });
@@ -1018,10 +1235,10 @@ function flyToSearchResult() {
     ? brain.tracks.find(t => `${t.title} ${t.artist} ${t.camelot} ${t.bpm}`.toLowerCase().includes(q))
     : brain.tracks[0];
   if (!m) return;
-  trackPanel.classList.add('hidden');
   tSearchEl.blur();
   closeModal();
   focusNode(m);
+  // panel stays open so you can keep browsing the search results
 }
 tSearchEl.addEventListener('input', () => renderTrackList(tSearchEl.value));
 tSearchEl.addEventListener('keydown', (e) => {
@@ -1029,40 +1246,47 @@ tSearchEl.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { trackPanel.classList.add('hidden'); tSearchEl.blur(); }
   e.stopPropagation(); // typing must not drive the camera
 });
-document.getElementById('trackToggle').addEventListener('click', () => {
-  trackPanel.classList.toggle('hidden');
-  if (!trackPanel.classList.contains('hidden')) {
-    tSearchEl.value = '';
-    renderTrackList();
-  }
-});
-document.getElementById('tClose').addEventListener('click', () => trackPanel.classList.add('hidden'));
+/* docked sidebar: header hamburger toggles visibility */
+function toggleSidebar(force) {
+  const hide = force !== undefined ? force : !trackPanel.classList.contains('hidden');
+  trackPanel.classList.toggle('hidden', hide);
+  document.getElementById('hudToggle').classList.toggle('active', !hide);
+  if (!hide) renderTrackList();
+}
+document.getElementById('hudToggle').addEventListener('click', () => toggleSidebar());
 
-/* "/" hotkey: open the track panel and jump to search from anywhere */
+/* "/" hotkey: reveal the sidebar and jump to search from anywhere */
 window.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   if (e.key === '/') {
     e.preventDefault();
-    trackPanel.classList.remove('hidden');
-    renderTrackList();
+    toggleSidebar(false);
     tSearchEl.focus();
   }
 });
 
-/* collapsible HUD: clicking the header hides the options, showing only the title */
-const hudEl = document.getElementById('hud');
-const hudToggleEl = document.getElementById('hudToggle');
-document.getElementById('hudHead').addEventListener('click', () => {
-  hudEl.classList.toggle('collapsed');
-  hudToggleEl.innerHTML = hudEl.classList.contains('collapsed') ? '&#9656;' : '&#9662;';
-});
-
 /* ---------- UI wiring ---------- */
-const brainSel = document.getElementById('brainSel');
-brainSel.innerHTML = '<option>Master Brain</option>' +
-  Object.keys(DATA.playlists).map(p => `<option>${p}</option>`).join('');
-brainSel.addEventListener('change', () => { brainName = brainSel.value; rebuildBrain(brainName); });
+/* sidebar brain list: MASTER BRAIN + playlists as clickable items */
+const MASTER_BRAIN = 'Master Brain';
+const brainListEl = document.getElementById('brainList');
+function renderBrainList() {
+  const names = [MASTER_BRAIN, ...Object.keys(DATA.playlists)];
+  brainListEl.innerHTML = '';
+  names.forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'brainItem' + (name === brainName ? ' active' : '');
+    b.textContent = name === MASTER_BRAIN ? 'MASTER BRAIN' : name;
+    b.addEventListener('click', () => {
+      if (brainName === name) return;
+      brainName = name;
+      rebuildBrain(brainName);
+      renderBrainList();
+    });
+    brainListEl.appendChild(b);
+  });
+}
+renderBrainList();
 
 let edgeStyle = 'clean';
 const freeBtn = document.getElementById('modeFree');
@@ -1122,6 +1346,47 @@ document.getElementById('spDismiss').addEventListener('click', () => {
     s.title = n;
     wrap.appendChild(s);
   }
+}
+
+/* header: export the current brain (tracks + typed synapses + playlists) as XML */
+{
+  const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  document.getElementById('exportXml').addEventListener('click', () => {
+    const tracks = (brain ? brain.tracks : []).map(t =>
+      `    <track id="${xmlEsc(t.id)}" title="${xmlEsc(t.title)}" artist="${xmlEsc(t.artist)}" ` +
+      `camelot="${xmlEsc(t.camelot)}" bpm="${t.bpm}" energy="${t.energy}" genre="${xmlEsc(t.genre)}"/>`)
+      .join('\n');
+    const edges = (brain ? brain.edges : []).map(e =>
+      `    <synapse a="${xmlEsc(e.a)}" b="${xmlEsc(e.b)}" type="${e.type || 'S'}" freq="${e.freq}"/>`)
+      .join('\n');
+    const playlists = Object.entries(DATA.playlists).map(([name, ids]) =>
+      `  <playlist name="${xmlEsc(name)}">\n` +
+      ids.map(id => `    <ref id="${xmlEsc(id)}"/>`).join('\n') + '\n  </playlist>').join('\n');
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<cratkit-dj-brain brain="${xmlEsc(brainName)}" exported="${new Date().toISOString()}">\n` +
+      `  <tracks>\n${tracks}\n  </tracks>\n` +
+      `  <synapses>\n${edges}\n  </synapses>\n` +
+      `  <playlists>\n${playlists}\n  </playlists>\n` +
+      `</cratkit-dj-brain>\n`;
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cratkit-dj-brain.xml';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+
+/* bottom-right help button: toggle the controls popover */
+{
+  const helpBtn = document.getElementById('helpBtn');
+  const hint = document.getElementById('hint');
+  helpBtn.addEventListener('click', (e) => { e.stopPropagation(); hint.classList.toggle('show'); });
+  window.addEventListener('click', (e) => {
+    if (!hint.contains(e.target) && !helpBtn.contains(e.target)) hint.classList.remove('show');
+  });
 }
 
 /* pointer events */
@@ -1184,6 +1449,8 @@ function setFlySpeed(v) {
   flySpeedVal.textContent = flySpeed;
 }
 flySpeedEl.addEventListener('input', () => setFlySpeed(+flySpeedEl.value));
+const brainSpreadEl = document.getElementById('brainSpread');
+brainSpreadEl.addEventListener('input', () => applySpread(+brainSpreadEl.value));
 
 /* auto-fly: forward propulsion; pointer position steers the aim */
 let autoFly = false;
@@ -1195,7 +1462,7 @@ function setAutoFly(on) {
   autoFlyBtn.innerHTML = autoFly ? '&#9632; Stop Fly' : '&#9654; Auto-Fly <span style="opacity:.6">(F)</span>';
   crosshairEl.classList.toggle('active', autoFly);
   renderer.domElement.style.cursor = autoFly ? 'none' : 'default';
-  controls.enableRotate = !autoFly; // aim is driven by the mouse, not orbit-drag
+  syncFlyAim(); // orbit-drag stays free (full 360°) unless the pointer is FPS-locked
   if (on) {
     // FPS-style aim: lock the pointer so raw mouse deltas steer the camera.
     // If the lock is refused (mobile / denied), the pointer-position steering
@@ -1204,24 +1471,31 @@ function setAutoFly(on) {
     if (el.requestPointerLock) {
       try {
         const p = el.requestPointerLock();
-        if (p && p.catch) p.catch(() => { /* fall back to position steering */ });
+        if (p && p.catch) p.catch(syncFlyAim); // lock denied -> orbit-drag aim stays on
       } catch (e) { /* fall back */ }
     }
   } else if (document.pointerLockElement) {
     document.exitPointerLock();
   }
 }
+/* Full 360° mouse aim while flying: with the pointer locked, raw FPS deltas
+   steer the view in every direction; if the lock is refused or lost (mobile /
+   denied / Esc), normal orbit-drag rotates a full 360° instead of freezing. */
+function syncFlyAim() {
+  controls.enableRotate = !(autoFly && document.pointerLockElement === renderer.domElement);
+}
+document.addEventListener('pointerlockchange', syncFlyAim);
 autoFlyBtn.addEventListener('click', () => { setAutoFly(!autoFly); if (autoFly) flight = null; });
 
 /* FPS mouse aim while the pointer is locked: raw movement deltas rotate the
-   camera around its own center (like a shooter), with a pitch limit. */
+   camera around its own center (like a shooter) — full 360° pan in every
+   direction, no pitch or yaw limits. */
 const _aimDir = new THREE.Vector3();
 document.addEventListener('mousemove', (e) => {
   if (!autoFly || document.pointerLockElement !== renderer.domElement) return;
   const sens = 0.0022;
   camera.rotateY(-e.movementX * sens);
   camera.rotateX(-e.movementY * sens);
-  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -1.45, 1.45);
   camera.getWorldDirection(_aimDir);
   const dist = controls.target.distanceTo(camera.position);
   controls.target.copy(camera.position).addScaledVector(_aimDir, dist);
@@ -1335,7 +1609,17 @@ function animate() {
       } else {
         eo.pulse.position.lerpVectors(eo.a, eo.b, u);
       }
-      eo.pulse.material.color.lerpColors(eo.colA, eo.colB, u);
+      eo.pulse.material.color.lerpColors(eo.colA, eo.colB, u).lerp(_whiteC, 0.55);
+      if (eo.type === 'S') {
+        // Sonic synapses throb rhythmically instead of gliding steadily
+        const th = eo.pulseScale * (1 + 0.5 * Math.sin(t * 4.6 + eo.phase));
+        eo.pulse.scale.set(th, eo.pulseLen, th);
+      }
+      // 'E'/'S' lines scroll their dash/dot pattern along the synapse
+      if (eo.dashTex) {
+        if (eo.texAxis === 'x') eo.dashTex.offset.x += eo.dashRate * dt;
+        else eo.dashTex.offset.y += eo.dashRate * dt;
+      }
       // glow pulse driven by the audio level (high-frequency synapses glow more)
       if (hoveredEdge !== eo) {
         const g = (eo.highFreq ? 0.72 : 0.88) + (eo.highFreq ? 1.55 : 1.1) * lvl;
@@ -1455,20 +1739,6 @@ function animate() {
       if (cur) {
         pfEl('pfBarName').textContent = 'PATH PREVIEW  \u00b7  ' + (nxt ? cur.title + ' \u2192 ' + nxt.title : cur.title);
       }
-    }
-  }
-
-  // keep the open modal floating over its node
-  if (modalTrack && brain) {
-    const node = brain.nodeById.get(modalTrack.id);
-    if (node) {
-      const v = node.position.clone().project(camera);
-      const x = (v.x * 0.5 + 0.5) * window.innerWidth;
-      const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
-      const el = document.getElementById('modalWrap');
-      const w = el.offsetWidth || 440, h = el.offsetHeight || 300;
-      el.style.left = Math.min(Math.max(x, w / 2 + 10), window.innerWidth - w / 2 - 10) + 'px';
-      el.style.top = Math.min(Math.max(y, h / 2 + 10), window.innerHeight - h / 2 - 10) + 'px';
     }
   }
 
