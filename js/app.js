@@ -1218,7 +1218,7 @@ function maybeWrap(dt) {
     _frustum.setFromProjectionMatrix(_projScreen);
     _boundTest.copy(brain.boundSphere);
     _boundTest.radius *= 1.45; // margin beyond the network's true extent
-    const outside = !_frustum.containsSphere(_boundTest);
+    const outside = !_frustum.intersectsSphere(_boundTest);
     // debounce: the condition must persist before arming the wrap
     if (!outside) { wrapHold = null; return; }
     wrapHold = (wrapHold || 0) + dt;
