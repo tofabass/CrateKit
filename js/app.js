@@ -314,6 +314,20 @@ function buildEdge(edge, posA, posB, radA, radB, trackA, trackB) {
     mesh.userData = { kind: 'edge', edge };
   }
 
+  // fat invisible hover hit-area: makes thin synapses much easier to grab
+  const hitR = Math.max(r * 3.5, 1.5); // generous invisible corridor around the thin visible line
+  const hitMat = new THREE.MeshBasicMaterial();
+  const hitMesh = curve
+    ? new THREE.Mesh(new THREE.TubeGeometry(curve, 16, hitR, 6, false), hitMat)
+    : new THREE.Mesh(new THREE.CylinderGeometry(hitR, hitR, len, 6, 1, true), hitMat);
+  if (!curve) {
+    hitMesh.position.copy(a).add(b).multiplyScalar(0.5);
+    hitMesh.quaternion.setFromUnitVectors(UP, d);
+  }
+  hitMesh.visible = false; // renderer skips it; this three build still raycasts it
+  hitMesh.userData = { kind: 'edge', edge };
+  extra.push(hitMesh);
+
   // flared dendrite-bout sockets where the synapse meets each node
   const flareR = r * 2.3;
   const flareLen = Math.max(len * (edgeStyle === 'neural' ? 0.2 : 0.16), 2.2);
@@ -666,6 +680,16 @@ function pick(x, y) {
   return hits.length ? hits[0].object : null;
 }
 
+/* ---------- hover toast (top center) ---------- */
+const toastEl = document.getElementById('toast');
+function toastTrack(t) {
+  const col = '#' + keyColor(t.camelot).getHexString();
+  return '<div class="trow"><span class="k" style="background:' + col + '33;color:' + col + ';border-color:' + col + '88">' + t.camelot + '</span>' +
+    '<div><div class="t">' + t.title + '</div><div class="a">' + t.artist + '</div></div></div>';
+}
+function showToast(html) { toastEl.innerHTML = html; toastEl.classList.add('show'); }
+function hideToast() { toastEl.classList.remove('show'); }
+
 function setHoveredNode(nodeObj) {
   if (hoveredNode === nodeObj) return;
   if (hoveredNode) hoveredNode.userData.label.visible = false;
@@ -684,6 +708,8 @@ function setHoveredNode(nodeObj) {
     updateNowPlaying(hoveredNode.userData.track, hoveredNode.userData.track, 'node-hover');
   }
   renderer.domElement.style.cursor = (typeof autoFly !== 'undefined' && autoFly) ? 'none' : (nodeObj ? 'pointer' : 'default');
+  if (nodeObj) showToast(toastTrack(nodeObj.userData.track));
+  else hideToast();
 }
 
 let hoverSource = null; // who owns the audio: 'node-hover' | 'node-click' | 'synapse-click' | null
@@ -698,6 +724,9 @@ function setHoveredEdge(eo) {
   if (hoveredEdge) {
     hoveredEdge.mesh.material.color.copy(hoveredEdge.baseColor).lerp(new THREE.Color(0xffffff), 0.65);
     hoveredEdge.pulse.material.opacity = 1;
+    showToast(toastTrack(eo.trackA) + toastTrack(eo.trackB));
+  } else {
+    hideToast();
   }
 }
 
@@ -768,10 +797,12 @@ function openModal(track) {
     row.querySelector('.qplay').addEventListener('click', (ev) => {
       ev.stopPropagation();
       const btn = ev.currentTarget;
-      audio.playTransition(track, other, { seconds: 16, mixBeats: 8 });
+      // the button's own track plays primary (immediate, full EQ);
+      // the focused track fades in as the incoming side
+      audio.playTransition(other, track, { seconds: 16, mixBeats: 8 });
       cascade.querySelectorAll('.qplay').forEach(b => b.classList.remove('playing'));
       btn.classList.add('playing');
-      updateNowPlaying(track, other, 'quick');
+      updateNowPlaying(other, track, 'quick');
     });
     cascade.appendChild(row);
   });
@@ -1143,7 +1174,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 
 /* WASD/QE fly + speed (slider, double-tap W/S) */
 const keys = {};
-let flySpeed = 25; // units/sec; Shift boosts
+let flySpeed = 12; // units/sec (gentle start; double-tap W / S to boost); Shift boosts
 let lastWTap = 0, lastSTap = 0;
 const flySpeedEl = document.getElementById('flySpeed');
 const flySpeedVal = document.getElementById('flySpeedVal');
@@ -1161,17 +1192,46 @@ const crosshairEl = document.getElementById('crosshair');
 function setAutoFly(on) {
   autoFly = on;
   autoFlyBtn.classList.toggle('active', autoFly);
-  autoFlyBtn.innerHTML = autoFly ? '&#9632; Stop Fly' : '&#9654; Auto-Fly';
+  autoFlyBtn.innerHTML = autoFly ? '&#9632; Stop Fly' : '&#9654; Auto-Fly <span style="opacity:.6">(F)</span>';
   crosshairEl.classList.toggle('active', autoFly);
   renderer.domElement.style.cursor = autoFly ? 'none' : 'default';
-  controls.enableRotate = !autoFly; // aim is driven by pointer position, not orbit-drag
+  controls.enableRotate = !autoFly; // aim is driven by the mouse, not orbit-drag
+  if (on) {
+    // FPS-style aim: lock the pointer so raw mouse deltas steer the camera.
+    // If the lock is refused (mobile / denied), the pointer-position steering
+    // in animate() takes over as the fallback.
+    const el = renderer.domElement;
+    if (el.requestPointerLock) {
+      try {
+        const p = el.requestPointerLock();
+        if (p && p.catch) p.catch(() => { /* fall back to position steering */ });
+      } catch (e) { /* fall back */ }
+    }
+  } else if (document.pointerLockElement) {
+    document.exitPointerLock();
+  }
 }
 autoFlyBtn.addEventListener('click', () => { setAutoFly(!autoFly); if (autoFly) flight = null; });
+
+/* FPS mouse aim while the pointer is locked: raw movement deltas rotate the
+   camera around its own center (like a shooter), with a pitch limit. */
+const _aimDir = new THREE.Vector3();
+document.addEventListener('mousemove', (e) => {
+  if (!autoFly || document.pointerLockElement !== renderer.domElement) return;
+  const sens = 0.0022;
+  camera.rotateY(-e.movementX * sens);
+  camera.rotateX(-e.movementY * sens);
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x, -1.45, 1.45);
+  camera.getWorldDirection(_aimDir);
+  const dist = controls.target.distanceTo(camera.position);
+  controls.target.copy(camera.position).addScaledVector(_aimDir, dist);
+});
 
 window.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return; // typing in search / selects must not fly
   const k = e.key.toLowerCase();
+  if (!e.repeat && k === 'f') { setAutoFly(!autoFly); if (autoFly) flight = null; return; } // F = enter/exit auto-fly
   keys[k] = true;
   if (autoFly && 'wasdqe'.includes(k)) setAutoFly(false); // manual keys take over
   if (!e.repeat) {
@@ -1412,16 +1472,20 @@ function animate() {
     }
   }
 
-  // auto-fly: propel forward; pointer position steers aim (center = straight ahead)
+  // auto-fly: propel forward. With the pointer locked, FPS mouse deltas
+  // (mousemove handler) drive the aim; otherwise the pointer's position on
+  // screen steers it (center = straight ahead).
   if (autoFly && !pf.previewing) {
     flight = null;
-    if (aimX !== 0 || aimY !== 0) {
-      const turn = 2.3 * dt;
-      camera.rotateY(-aimX * turn);
-      camera.rotateX(aimY * turn);
-      const dist = controls.target.distanceTo(camera.position);
-      camera.getWorldDirection(fwd);
-      controls.target.copy(camera.position).addScaledVector(fwd, dist);
+    if (document.pointerLockElement !== renderer.domElement) {
+      if (aimX !== 0 || aimY !== 0) {
+        const turn = 2.3 * dt;
+        camera.rotateY(-aimX * turn);
+        camera.rotateX(aimY * turn);
+        const dist = controls.target.distanceTo(camera.position);
+        camera.getWorldDirection(fwd);
+        controls.target.copy(camera.position).addScaledVector(fwd, dist);
+      }
     }
     const sp = flySpeed * dt;
     camera.getWorldDirection(fwd);
