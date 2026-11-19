@@ -52,18 +52,29 @@ export class BrainAudio {
     return this._lvl;
   }
 
+  /* DJ-world tempo: a track at 99 BPM or below sits on the same groove as
+     its double (a 70 BPM half-time track is a 140 BPM grid), so normalize
+     slow tempos up before any tempo math. Without this, a 70 BPM track
+     paired with a 140 BPM track would be rate-shifted (1.5x / 0.75x) instead
+     of locking together at 1.0x. Display and data keep the raw BPM; only
+     playback/tempo math is normalized. */
+  static normBpm(bpm) {
+    const b = Number(bpm) || 0;
+    return b > 0 && b <= 99 ? b * 2 : b;
+  }
+
   /* When two tracks play together at different tempos they "meet in the
      middle": both are rate-adjusted to the average BPM. Returns 0 when they
      already share a tempo (or tempo data is missing). */
   static meetBpm(a, b) {
-    const x = Number(a) || 0, y = Number(b) || 0;
+    const x = BrainAudio.normBpm(a), y = BrainAudio.normBpm(b);
     if (!x || !y || x === y) return 0;
     return (x + y) / 2;
   }
 
   /* Playback rate that makes a track with `bpm` sound at `targetBpm`. */
   static rateFor(bpm, targetBpm) {
-    const r = (Number(targetBpm) || 120) / (Number(bpm) || 120);
+    const r = (Number(targetBpm) || 120) / (BrainAudio.normBpm(bpm) || 120);
     return Math.max(0.5, Math.min(2, r));
   }
 
@@ -281,12 +292,13 @@ export class BrainAudio {
    * -> outgoing fades out over 4 bars -> repeat until end of path.
    * Returns { t0, total, kf } or null if superseded while loading. */
   buildTimeline(bpmList) {
-    const n = bpmList.length;
-    const kf = bpmList.map(() => []);
+    const bpm = bpmList.map(v => BrainAudio.normBpm(v) || 120); // 4-bar lengths on the DJ grid
+    const n = bpm.length;
+    const kf = bpm.map(() => []);
     const win = []; // win[i] = overlap window of tracks i and i+1 (t0-relative)
     let t = 0;
     for (let i = 0; i < n - 1; i++) {
-      const s = 960 / (bpmList[i] || 120);
+      const s = 960 / bpm[i];
       const soloEnd = t + s;
       const inEnd = soloEnd + s;
       const bothEnd = inEnd + s;
@@ -299,7 +311,7 @@ export class BrainAudio {
     }
     if (n >= 1) {
       const last = n - 1;
-      const s = 960 / (bpmList[last] || 120);
+      const s = 960 / bpm[last];
       const soloEnd = t + s;
       const end = soloEnd + s;
       if (kf[last].length === 0) kf[last].push({ t: 0, v: 1 });
@@ -329,7 +341,7 @@ export class BrainAudio {
     // tempo plans: own BPM while solo, the "meet in the middle" BPM while
     // overlapping a neighbour — so simultaneous tracks always share a tempo
     const n = tracks.length;
-    const b = tracks.map(t => Number(t.bpm) || 120);
+    const b = tracks.map(t => BrainAudio.normBpm(t.bpm) || 120);
     const meet = (x, y) => BrainAudio.meetBpm(b[x], b[y]);
 
     const chans = tracks.map((tr, i) => {
