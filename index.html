@@ -19,20 +19,39 @@
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
   canvas { display: block; }
 
+  /* ---- top header bar ---- */
   #hud {
-    position: fixed; top: 16px; left: 16px; z-index: 10;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 16px; backdrop-filter: blur(10px); min-width: 250px;
+    position: fixed; top: 0; left: 0; right: 0; height: 48px; z-index: 45;
+    background: rgba(14, 15, 20, 0.88);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
   }
-  #hud h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: 0.12em; font-weight: 700; }
+  #hudToggle {
+    background: #1c1c26; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--dim); font-size: 13px; width: 30px; height: 30px; cursor: pointer; transition: all 0.15s;
+  }
+  #hudToggle:hover { color: #fff; border-color: rgba(110,168,255,0.5); }
+  #hudToggle.active { color: var(--accent); border-color: rgba(110,168,255,0.5); background: rgba(110,168,255,0.14); }
+  #hud h1 { margin: 0; font-size: 14px; letter-spacing: 0.14em; font-weight: 700; white-space: nowrap; }
   #hud h1 span { color: var(--accent); }
-  #hud .sub { font-size: 11px; color: var(--dim); margin-bottom: 12px; }
+  .hSpacer { flex: 1; }
+  .seg { display: flex; background: #1c1c26; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: none; border: none; color: var(--dim); padding: 6px 12px; font-size: 11px;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.active { background: rgba(110, 168, 255, 0.18); color: var(--accent); }
+  .seg-btn {
+    background: #1c1c26; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--dim); padding: 6px 12px; font-size: 11px; cursor: pointer;
+    letter-spacing: 0.05em; white-space: nowrap; transition: all 0.15s;
+  }
+  .seg-btn:hover { color: #fff; border-color: rgba(110,168,255,0.5); }
+  .seg-btn.active { background: rgba(251, 191, 36, 0.14); color: #fbbf24; border-color: rgba(251, 191, 36, 0.5); }
   .row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
   .row label { font-size: 11px; color: var(--dim); width: 44px; }
-  select {
-    flex: 1; background: #1c1c26; color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 6px 8px; font-size: 12px; outline: none;
-  }
   .modes { display: flex; gap: 6px; }
   .modes button {
     flex: 1; background: #1c1c26; color: var(--dim); border: 1px solid var(--line);
@@ -50,29 +69,31 @@
   #autoFly.active { background: rgba(110, 168, 255, 0.18); color: var(--accent); border-color: rgba(110, 168, 255, 0.5); }
   #flySpeed { flex: 1; accent-color: var(--accent); min-width: 40px; cursor: pointer; }
   #flySpeedVal { font-size: 10px; color: var(--dim); width: 20px; text-align: right; }
+  #brainSpread { accent-color: var(--accent); min-width: 40px; cursor: pointer; }
+  #brainSpreadVal { font-size: 10px; color: var(--dim); width: 30px; text-align: right; }
 
-  #hudHead { position: relative; cursor: pointer; user-select: none; padding-right: 20px; }
-  #hudToggle { position: absolute; top: 0; right: 0; color: var(--dim); font-size: 11px; padding: 2px 4px; }
-  #hudHead:hover #hudToggle { color: #fff; }
-  #hud.collapsed #hudBody { display: none; }
-  #hud.collapsed #hudHead { padding-right: 0; }
-  #hud.collapsed #hudHead .sub { display: none; }
-  #hud.collapsed { min-width: 0; }
+  /* ---- export button ---- */
+  #exportXml {
+    background: rgba(110, 168, 255, 0.14); color: var(--accent); border: 1px solid rgba(110, 168, 255, 0.45);
+    border-radius: 8px; padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
+    letter-spacing: 0.08em; white-space: nowrap; transition: all 0.15s;
+  }
+  #exportXml:hover { background: rgba(110, 168, 255, 0.28); color: #fff; }
 
   @media (max-width: 700px) {
-    #hud { top: 8px; left: 8px; min-width: 0; padding: 10px 12px; }
-    #hud h1 { font-size: 12px; }
-    #hud .sub { display: none; }
+    #hud { padding: 0 8px; gap: 6px; }
+    #hud h1 { font-size: 11px; letter-spacing: 0.1em; }
+    #hud h1 span { display: none; }
+    .seg button { padding: 5px 8px; font-size: 10px; }
+    #exportXml { display: none; }
+    #autoFly { padding: 5px 8px; font-size: 10px; }
+    #flySpeed { width: 44px; }
+    #brainSpread { width: 48px; }
     #legend { display: none; }
     .row { margin-bottom: 7px; }
-    select { padding: 5px 6px; }
-    .modes button { padding: 6px 3px; font-size: 10px; }
-    #nowPlaying { top: 8px; right: 8px; padding: 6px 10px; max-width: 44vw; }
+    #nowPlaying { top: 60px; right: 8px; padding: 6px 10px; max-width: 44vw; }
     #npText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #hint {
-      bottom: 8px; left: 8px; right: 8px; transform: none; white-space: normal;
-      text-align: center; font-size: 10px; padding: 5px 10px;
-    }
+    #hint { bottom: 50px; right: 8px; left: auto; width: min(340px, calc(100vw - 16px)); }
     #modalWrap { width: min(440px, 94vw); }
     #synapsePrompt { width: min(420px, calc(100vw - 24px)); }
     #returnView { font-size: 11px; padding: 8px 14px; }
@@ -93,11 +114,24 @@
   .bar { height: 6px; border-radius: 3px; margin: 4px 0 6px;
     background: linear-gradient(90deg, #2e6bff, #2ecc40, #ffd500, #ff8c1a, #ff2d2d); }
 
-  #hint {
-    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
-    font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line);
-    border-radius: 20px; padding: 6px 16px; z-index: 10; white-space: nowrap;
+  /* ---- help button + controls popover ---- */
+  #helpBtn {
+    position: fixed; bottom: 12px; right: 12px; z-index: 40;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--line); color: var(--dim);
+    font-size: 15px; font-weight: 700; cursor: pointer; backdrop-filter: blur(10px);
+    transition: all 0.15s; line-height: 1;
   }
+  #helpBtn:hover { color: #fff; border-color: rgba(110,168,255,0.5); }
+  #hint {
+    position: fixed; bottom: 52px; right: 12px; z-index: 40; width: 360px; max-width: calc(100vw - 24px);
+    font-size: 11px; line-height: 1.65; color: var(--dim); background: rgba(14, 15, 20, 0.94);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(12px);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    opacity: 0; pointer-events: none; transform: translateY(6px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  #hint.show, #helpBtn:hover ~ #hint { opacity: 1; pointer-events: auto; transform: none; }
 
   #synapsePrompt {
     position: fixed; bottom: 52px; left: 50%; transform: translateX(-50%);
@@ -133,8 +167,8 @@
   #spDismiss:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
   #modalWrap {
-    position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
-    width: 440px; max-height: 78vh; overflow-y: auto; z-index: 20;
+    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    width: 440px; max-height: calc(100vh - 96px); overflow-y: auto; z-index: 46;
   }
   #modalWrap.hidden { display: none; }
   #modalCard {
@@ -173,8 +207,16 @@
   }
   .qplay:hover { background: rgba(110, 168, 255, 0.3); }
   .qplay.playing { background: rgba(255, 90, 110, 0.25); color: #ff8a9a; border-color: rgba(255, 90, 110, 0.6); }
+  .etype {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+  }
+  .et-H { color: #34d399; background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.45); }
+  .et-E { color: #fbbf24; background: rgba(251, 191, 36, 0.14); border: 1px solid rgba(251, 191, 36, 0.45); }
+  .et-S { color: #6ea8ff; background: rgba(110, 168, 255, 0.14); border: 1px solid rgba(110, 168, 255, 0.45); }
   #nowPlaying {
-    position: fixed; top: 16px; right: 16px; z-index: 10; font-size: 11px; color: var(--dim);
+    position: fixed; top: 60px; right: 16px; z-index: 44; font-size: 11px; color: var(--dim);
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px;
     display: flex; gap: 8px; align-items: center;
   }
@@ -186,7 +228,7 @@
 
   /* ---- hover toast (top center) ---- */
   #toast {
-    position: fixed; top: 14px; left: 50%; transform: translate(-50%, -10px);
+    position: fixed; top: 62px; left: 50%; transform: translate(-50%, -10px);
     z-index: 30; pointer-events: none; opacity: 0;
     background: rgba(14, 14, 20, 0.92); border: 1px solid var(--line); border-radius: 12px;
     padding: 12px 20px; text-align: left; box-shadow: 0 8px 30px rgba(0,0,0,0.45);
@@ -215,17 +257,29 @@
   }
   #trackToggle:hover { color: #fff; border-color: rgba(110,168,255,0.5); }
   #pfPanel {
-    position: fixed; top: 0; right: 0; height: 100vh; width: 360px; z-index: 40;
+    position: fixed; top: 48px; right: 0; height: calc(100vh - 48px); width: 360px; z-index: 44;
     background: rgba(16, 16, 22, 0.94); border-left: 1px solid var(--line);
     display: flex; flex-direction: column; backdrop-filter: blur(8px);
   }
   #pfPanel.hidden { display: none; }
+  /* ---- slim docked sidebar ---- */
   #trackPanel {
-    position: fixed; top: 0; left: 0; height: 100vh; width: 320px; z-index: 40;
-    background: rgba(16, 16, 22, 0.94); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; backdrop-filter: blur(8px);
+    position: fixed; top: 48px; left: 0; bottom: 0; width: 220px; z-index: 44;
+    background: rgba(14, 15, 20, 0.88); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   }
   #trackPanel.hidden { display: none; }
+  .sbSec { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); padding: 12px 14px 6px; }
+  #brainList { padding-bottom: 6px; }
+  .brainItem {
+    display: block; width: calc(100% - 20px); text-align: left;
+    background: none; border: 1px solid transparent;
+    color: var(--text); font-size: 12px; padding: 7px 12px; margin: 2px 10px; border-radius: 8px;
+    cursor: pointer; letter-spacing: 0.06em; transition: all 0.15s;
+  }
+  .brainItem:hover { background: rgba(255, 255, 255, 0.05); }
+  .brainItem.active { background: rgba(110, 168, 255, 0.14); color: var(--accent); border-color: rgba(110, 168, 255, 0.35); font-weight: 700; }
+  #trackPanel #legend { margin-top: auto; padding-bottom: 14px; }
   #tCount { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); padding: 6px 14px 0; }
   #tSearch {
     width: calc(100% - 28px); margin: 10px 14px 2px;
@@ -293,8 +347,8 @@
   .pfSavedRow .pfDel:hover { color: #fff; }
 
   #returnView {
-    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 35; background: rgba(18, 18, 26, 0.92); border: 1px solid rgba(110, 168, 255, 0.5);
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+    z-index: 46; background: rgba(18, 18, 26, 0.92); border: 1px solid rgba(110, 168, 255, 0.5);
     color: var(--accent); font-size: 12px; font-weight: 600; border-radius: 20px;
     padding: 9px 20px; cursor: pointer; backdrop-filter: blur(10px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -332,42 +386,25 @@
 </head>
 <body>
   <div id="hud">
-    <div id="hudHead">
-      <h1>CRATEKIT <span>DJ BRAIN</span></h1>
-      <div class="sub">Spatial transition network &middot; prototype</div>
-      <span id="hudToggle" title="Collapse / expand">&#9662;</span>
-    </div>
-    <div id="hudBody">
-    <div class="row">
-      <label>BRAIN</label>
-      <select id="brainSel"></select>
-    </div>
-    <div class="row modes">
+    <button id="hudToggle" title="Toggle sidebar">&#9776;</button>
+    <h1>CRATEKIT <span>DJ BRAIN</span></h1>
+    <div class="hSpacer"></div>
+    <div class="seg">
       <button id="modeFree" class="active">Free-Roam</button>
-      <button id="modeCluster">Clustered</button>
+      <button id="modeCluster">Orbital</button>
     </div>
-    <div class="row modes">
-      <span class="lbl">Synapses</span>
+    <button id="pfToggle" class="seg-btn">&#9889; Pathfinder</button>
+    <div class="hSpacer"></div>
+    <button id="autoFly">&#9654; Auto-Fly <span style="opacity:.6">(F)</span></button>
+    <input type="range" id="flySpeed" min="5" max="80" step="1" value="12" aria-label="Fly speed" style="width:70px">
+    <span id="flySpeedVal">12</span>
+    <input type="range" id="brainSpread" min="0.4" max="2.5" step="0.05" value="1.0" aria-label="Brain spread" style="width:80px" title="Expand / compact the whole brain (node sizes stay constant)">
+    <span id="brainSpreadVal">1.0x</span>
+    <div class="seg">
       <button id="edgeClean" class="active">Clean</button>
       <button id="edgeNeural">Neural</button>
     </div>
-    <div class="row">
-      <button id="autoFly">&#9654; Auto-Fly <span style="opacity:.6">(F)</span></button>
-      <input type="range" id="flySpeed" min="5" max="80" step="1" value="12" aria-label="Fly speed">
-      <span id="flySpeedVal">12</span>
-    </div>
-    <div class="row">
-      <button id="pfToggle">&#9889; Pathfinder</button>
-      <button id="trackToggle">&#9776; Track List</button>
-    </div>
-    <div id="legend">
-      <div>Node fill = Camelot key &middot; rim = energy &middot; size = connection count</div>
-      <div class="swatches" id="keySwatches"></div>
-      <div>Energy &mdash; blue (low) &rarr; red (high)</div>
-      <div class="bar"></div>
-      <div>Synapse blue &rarr; red = transition frequency</div>
-    </div>
-    </div>
+    <button id="exportXml" title="Export brain as XML">Export XML</button>
   </div>
 
   <div id="nowPlaying" class="hidden">
@@ -377,7 +414,8 @@
 
   <div id="toast"></div>
 
-  <div id="hint">drag = orbit &middot; right-drag / 2-finger = pan &middot; scroll / pinch = zoom &middot; WASD/QE = fly &middot; double-tap W / S = speed up / down &middot; F = auto-fly (FPS mouse aim) &middot; hover node = preview &middot; click node = play until &middot;■&middot; &middot; click synapse = transition preview until &middot;■&middot;</div>
+  <button id="helpBtn" title="Controls">?</button>
+  <div id="hint">drag = orbit &middot; right-drag / 2-finger = pan &middot; scroll / pinch = zoom<br>WASD/QE = fly &middot; double-tap W / S = speed up / down<br>F = auto-fly (full 360&deg; FPS mouse aim)<br>hover node = preview &middot; click node = play until &#9632;<br>click synapse = transition preview until &#9632;<br>&thinsp;/&thinsp; = search tracks</div>
 
   <div id="synapsePrompt" class="hidden">
     <div class="spHead"><span class="spIcon"></span><h3>New synapse detected</h3></div>
@@ -427,14 +465,21 @@
     <div class="pfSaved" id="pfSaved"></div>
   </div>
 
-  <div id="trackPanel" class="hidden">
-    <div class="pfHead">
-      <h3>&#9776; TRACKS</h3>
-      <button id="tClose" title="Close">&times;</button>
-    </div>
-    <input id="tSearch" type="search" placeholder="Search title, artist, key, BPM…  ( / )" autocomplete="off">
+  <div id="trackPanel">
+    <div class="sbSec">BRAIN</div>
+    <div id="brainList"></div>
+    <div class="sbSec">TRACKS</div>
+    <input id="tSearch" type="search" placeholder="Search tracks…  ( / )" autocomplete="off">
     <div id="tCount"></div>
     <div id="tList"></div>
+    <div id="legend">
+      <div>Node fill = Camelot key &middot; rim = energy &middot; size = connections</div>
+      <div class="swatches" id="keySwatches"></div>
+      <div>Energy &mdash; blue (low) &rarr; red (high)</div>
+      <div class="bar"></div>
+      <div>Synapse blue &rarr; red = transition frequency</div>
+      <div>H = harmonic &middot; E = energetic &middot; S = sonic</div>
+    </div>
   </div>
 
   <script src="./js/trackdata.js"></script>
