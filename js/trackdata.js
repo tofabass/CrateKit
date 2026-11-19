@@ -91,6 +91,17 @@
     return d === 0 || d === 1 || d === 11;
   }
 
+  /* Connection type:
+     'H' — Harmonic: shared harmony (same / adjacent Camelot key)
+     'E' — Energetic: shared energy level (within 1 step)
+     'S' — Sonic: otherwise — it just objectively sounds good together */
+  function edgeType(A, B) {
+    if (keyClose(A.camelot, B.camelot)) return 'H';
+    if (Math.abs(A.energy - B.energy) <= 1) return 'E';
+    return 'S';
+  }
+
+  const byId = new Map(tracks.map(t => [t.id, t]));
   const edges = [];
   const seen = new Set();
   const addEdge = (a, b, freq) => {
@@ -98,7 +109,7 @@
     const k = a < b ? a + '|' + b : b + '|' + a;
     if (seen.has(k)) return false;
     seen.add(k);
-    edges.push({ a, b, freq });
+    edges.push({ a, b, freq, type: edgeType(byId.get(a), byId.get(b)) });
     return true;
   };
 
