@@ -184,6 +184,25 @@
   #nowPlaying button { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; }
   #nowPlaying button:hover { color: #fff; }
 
+  /* ---- hover toast (top center) ---- */
+  #toast {
+    position: fixed; top: 14px; left: 50%; transform: translate(-50%, -10px);
+    z-index: 30; pointer-events: none; opacity: 0;
+    background: rgba(14, 14, 20, 0.92); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 20px; text-align: left; box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    max-width: 70vw;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast .trow { display: flex; align-items: center; gap: 12px; }
+  #toast .trow + .trow { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  #toast .t { font-size: 17px; font-weight: 650; color: #fff; line-height: 1.25; }
+  #toast .a { font-size: 13px; color: var(--dim); margin-top: 2px; }
+  #toast .k {
+    font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 7px;
+    border: 1px solid; white-space: nowrap; letter-spacing: 0.5px;
+  }
+
   /* ---- Pathfinder ---- */
   #pfToggle {
     flex: 1; background: #1c1c26; color: var(--dim); border: 1px solid var(--line);
@@ -333,9 +352,9 @@
       <button id="edgeNeural">Neural</button>
     </div>
     <div class="row">
-      <button id="autoFly">&#9654; Auto-Fly</button>
-      <input type="range" id="flySpeed" min="5" max="80" step="1" value="25" aria-label="Fly speed">
-      <span id="flySpeedVal">25</span>
+      <button id="autoFly">&#9654; Auto-Fly <span style="opacity:.6">(F)</span></button>
+      <input type="range" id="flySpeed" min="5" max="80" step="1" value="12" aria-label="Fly speed">
+      <span id="flySpeedVal">12</span>
     </div>
     <div class="row">
       <button id="pfToggle">&#9889; Pathfinder</button>
@@ -356,7 +375,9 @@
     <button id="npStop" title="Stop">■</button>
   </div>
 
-  <div id="hint">drag = orbit &middot; right-drag / 2-finger = pan &middot; scroll / pinch = zoom &middot; WASD/QE = fly &middot; double-tap W / S = speed up / down &middot; Auto-Fly: move mouse to steer &middot; hover node = preview &middot; click node = play until &middot;■&middot; &middot; click synapse = transition preview until &middot;■&middot;</div>
+  <div id="toast"></div>
+
+  <div id="hint">drag = orbit &middot; right-drag / 2-finger = pan &middot; scroll / pinch = zoom &middot; WASD/QE = fly &middot; double-tap W / S = speed up / down &middot; F = auto-fly (FPS mouse aim) &middot; hover node = preview &middot; click node = play until &middot;■&middot; &middot; click synapse = transition preview until &middot;■&middot;</div>
 
   <div id="synapsePrompt" class="hidden">
     <div class="spHead"><span class="spIcon"></span><h3>New synapse detected</h3></div>
